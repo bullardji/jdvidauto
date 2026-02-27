@@ -1,0 +1,121 @@
+{
+  "name": "Julian Dorey - Content Calendar Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "schedule-clip",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-schedule",
+      "name": "Webhook: Schedule Clip",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "notes": "POST /webhook/schedule-clip with JSON body: { filename, scheduled_date, caption_override, platforms: ['instagram','tiktok','youtube'] }"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nconst required = ['filename', 'scheduled_date'];\nconst missing = required.filter(f => !body[f]);\nif (missing.length > 0) {\n  return [{ json: { error: `Missing fields: ${missing.join(', ')}`, valid: false } }];\n}\n\nconst platforms = body.platforms || ['instagram', 'tiktok', 'youtube'];\nconst validPlatforms = ['instagram', 'tiktok', 'youtube'];\nconst invalidPlatforms = platforms.filter(p => !validPlatforms.includes(p));\nif (invalidPlatforms.length > 0) {\n  return [{ json: { error: `Invalid platforms: ${invalidPlatforms.join(', ')}`, valid: false } }];\n}\n\nconst scheduleDate = new Date(body.scheduled_date);\nif (isNaN(scheduleDate.getTime())) {\n  return [{ json: { error: 'Invalid scheduled_date format', valid: false } }];\n}\n\nreturn [{\n  json: {\n    valid: true,\n    filename: body.filename,\n    scheduled_date: body.scheduled_date,\n    caption_override: body.caption_override || null,\n    platforms,\n  }\n}];"
+      },
+      "id": "validate-request",
+      "name": "Validate Schedule Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "valid-check",
+      "name": "Request Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst fs = require('fs');\n\nconst calendarPath = '/data/content_calendar.json';\nlet calendar = [];\ntry {\n  const raw = fs.readFileSync(calendarPath, 'utf8');\n  calendar = JSON.parse(raw);\n} catch (e) {\n  calendar = [];\n}\n\nconst entry = {\n  id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),\n  filename: item.filename,\n  scheduled_date: item.scheduled_date,\n  caption_override: item.caption_override,\n  platforms: item.platforms,\n  status: 'scheduled',\n  created_at: new Date().toISOString(),\n};\n\ncalendar.push(entry);\ncalendar.sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date));\n\nfs.writeFileSync(calendarPath, JSON.stringify(calendar, null, 2));\n\nreturn [{ json: { success: true, entry } }];"
+      },
+      "id": "add-to-calendar",
+      "name": "Add to Content Calendar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: $json.error }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 420]
+    }
+  ],
+  "connections": {
+    "Webhook: Schedule Clip": {
+      "main": [
+        [{ "node": "Validate Schedule Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Schedule Request": {
+      "main": [
+        [{ "node": "Request Valid?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Request Valid?": {
+      "main": [
+        [{ "node": "Add to Content Calendar", "type": "main", "index": 0 }],
+        [{ "node": "Respond Error", "type": "main", "index": 0 }]
+      ]
+    },
+    "Add to Content Calendar": {
+      "main": [
+        [{ "node": "Respond Success", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "julian-dorey" },
+    { "name": "content-calendar" }
+  ]
+}

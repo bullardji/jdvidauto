@@ -1,0 +1,263 @@
+{
+  "name": "Julian Dorey - Multi-Platform Post",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9,13,17 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Post Schedule (9am, 1pm, 5pm)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "notes": "Runs at 9 AM, 1 PM, 5 PM daily (timezone from GENERIC_TIMEZONE env var). Adjust times based on audience analytics."
+    },
+    {
+      "parameters": {
+        "command": "ls -1t /data/clips-processed/*_watermarked.mp4 2>/dev/null | head -1 || echo 'NO_CLIPS'"
+      },
+      "id": "get-next-clip",
+      "name": "Get Next Clip to Post",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-clip",
+              "leftValue": "={{ $json.stdout.trim() }}",
+              "rightValue": "NO_CLIPS",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "has-clip-check",
+      "name": "Has Clip Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const filepath = $input.first().json.stdout.trim();\nconst filename = filepath.split('/').pop();\n\n// Extract episode number from filename\nconst epMatch = filename.match(/[Ee][Pp]\\.?(\\d+)/);\nconst episode = epMatch ? parseInt(epMatch[1]) : null;\n\n// Build a caption from the filename\nconst nameClean = filename\n  .replace(/_watermarked\\.mp4$/, '')\n  .replace(/^[Ee][Pp]\\.?\\d+[_-]?/, '')\n  .replace(/[_-]/g, ' ')\n  .trim();\n\nconst caption = `${nameClean}\\n\\nFull episode on Julian Dorey's YouTube:\\nhttps://www.youtube.com/@JulianDorey/\\n\\n#JulianDorey #Podcast #Clips`;\n\nconst tiktokCaption = `${nameClean} #JulianDorey #Podcast #Clips #FYP`;\n\nreturn [{\n  json: {\n    filepath,\n    filename,\n    episode,\n    caption,\n    tiktokCaption,\n    youtubeTitle: nameClean,\n    youtubeDescription: `From Julian Dorey Podcast Episode ${episode || 'unknown'}\\n\\nSubscribe: https://www.youtube.com/@JulianDorey/`,\n  }\n}];"
+      },
+      "id": "build-metadata",
+      "name": "Build Post Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.INSTAGRAM_BUSINESS_ACCOUNT_ID }}/media",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "media_type", "value": "REELS" },
+            { "name": "video_url", "value": "={{ $json.filepath }}" },
+            { "name": "caption", "value": "={{ $json.caption }}" },
+            { "name": "access_token", "value": "={{ $env.META_ACCESS_TOKEN }}" }
+          ]
+        }
+      },
+      "id": "post-instagram-init",
+      "name": "Instagram Reels - Create Container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 60],
+      "notes": "Step 1 of Instagram Reels upload: create a media container. Requires a publicly accessible video_url. In production, serve clips via a temp URL or upload to a CDN first."
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/{{ $env.INSTAGRAM_BUSINESS_ACCOUNT_ID }}/media_publish",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "creation_id", "value": "={{ $json.id }}" },
+            { "name": "access_token", "value": "={{ $env.META_ACCESS_TOKEN }}" }
+          ]
+        }
+      },
+      "id": "post-instagram-publish",
+      "name": "Instagram Reels - Publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 60],
+      "notes": "Step 2: publish the container. Add a Wait node before this in production to let Instagram process the video (check status_code == FINISHED)."
+    },
+    {
+      "parameters": {
+        "url": "https://open.tiktokapis.com/v2/post/publish/video/init/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.TIKTOK_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json; charset=UTF-8" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"post_info\": {\n    \"title\": \"{{ $json.tiktokCaption }}\",\n    \"privacy_level\": \"SELF_ONLY\",\n    \"disable_duet\": false,\n    \"disable_comment\": false,\n    \"disable_stitch\": false\n  },\n  \"source_info\": {\n    \"source\": \"FILE_UPLOAD\"\n  }\n}"
+      },
+      "id": "post-tiktok-init",
+      "name": "TikTok - Init Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 240],
+      "notes": "TikTok Content Posting API: initialize upload. Set privacy_level to PUBLIC_TO_EVERYONE for live posting. Using SELF_ONLY as safe default for testing."
+    },
+    {
+      "parameters": {
+        "url": "=={{ $json.data.upload_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "video/mp4" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "post-tiktok-upload",
+      "name": "TikTok - Upload Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 240],
+      "notes": "Upload video binary to the upload_url returned by init. In production, read the file from disk and attach as binary."
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.GOOGLE_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"snippet\": {\n    \"title\": \"{{ $json.youtubeTitle }}\",\n    \"description\": \"{{ $json.youtubeDescription }}\",\n    \"tags\": [\"Julian Dorey\", \"Podcast\", \"Clips\"],\n    \"categoryId\": \"22\"\n  },\n  \"status\": {\n    \"privacyStatus\": \"private\",\n    \"selfDeclaredMadeForKids\": false\n  }\n}"
+      },
+      "id": "post-youtube-init",
+      "name": "YouTube Shorts - Init Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 420],
+      "notes": "YouTube Data API v3 resumable upload init. Set privacyStatus to 'public' for live posting. Using 'private' as safe default. Shorts are auto-detected for vertical videos under 60s."
+    },
+    {
+      "parameters": {
+        "command": "=mkdir -p /data/clips-posted && mv \"{{ $json.filepath }}\" /data/clips-posted/"
+      },
+      "id": "move-to-posted",
+      "name": "Move to Posted",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1700, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst timestamp = new Date().toISOString();\nconst logEntry = `${timestamp} | ${item.filename} | EP${item.episode} | POSTED\\n`;\n\nconst fs = require('fs');\nfs.appendFileSync('/data/post_log.csv', logEntry);\n\nreturn [{ json: { ...item, posted_at: timestamp, status: 'posted' } }];"
+      },
+      "id": "log-post",
+      "name": "Log Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 200]
+    },
+    {
+      "parameters": {},
+      "id": "no-clips-noop",
+      "name": "No Clips Ready",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 420]
+    }
+  ],
+  "connections": {
+    "Post Schedule (9am, 1pm, 5pm)": {
+      "main": [
+        [{ "node": "Get Next Clip to Post", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Next Clip to Post": {
+      "main": [
+        [{ "node": "Has Clip Ready?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Has Clip Ready?": {
+      "main": [
+        [{ "node": "Build Post Metadata", "type": "main", "index": 0 }],
+        [{ "node": "No Clips Ready", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Post Metadata": {
+      "main": [
+        [
+          { "node": "Instagram Reels - Create Container", "type": "main", "index": 0 },
+          { "node": "TikTok - Init Upload", "type": "main", "index": 0 },
+          { "node": "YouTube Shorts - Init Upload", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Instagram Reels - Create Container": {
+      "main": [
+        [{ "node": "Instagram Reels - Publish", "type": "main", "index": 0 }]
+      ]
+    },
+    "Instagram Reels - Publish": {
+      "main": [
+        [{ "node": "Move to Posted", "type": "main", "index": 0 }]
+      ]
+    },
+    "TikTok - Init Upload": {
+      "main": [
+        [{ "node": "TikTok - Upload Video", "type": "main", "index": 0 }]
+      ]
+    },
+    "TikTok - Upload Video": {
+      "main": [
+        [{ "node": "Move to Posted", "type": "main", "index": 0 }]
+      ]
+    },
+    "YouTube Shorts - Init Upload": {
+      "main": [
+        [{ "node": "Move to Posted", "type": "main", "index": 0 }]
+      ]
+    },
+    "Move to Posted": {
+      "main": [
+        [{ "node": "Log Post", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "julian-dorey" },
+    { "name": "social-media-posting" }
+  ]
+}

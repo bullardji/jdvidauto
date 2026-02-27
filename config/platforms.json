@@ -1,0 +1,55 @@
+{
+  "julian_youtube_url": "https://www.youtube.com/@JulianDorey/",
+  "min_episode_number": 343,
+
+  "channels": {
+    "instagram": {
+      "handle": "@juliandorey.wav",
+      "url": "https://www.instagram.com/juliandorey.wav/",
+      "bio_link": "https://www.youtube.com/@JulianDorey/",
+      "post_type": "reels",
+      "max_caption_length": 2200,
+      "hashtags": ["#JulianDorey", "#Podcast", "#Clips", "#Reels"]
+    },
+    "tiktok": {
+      "handle": "@juliandorey.wav",
+      "url": "https://www.tiktok.com/@juliandorey.wav",
+      "bio_link": "https://www.youtube.com/@JulianDorey/",
+      "post_type": "video",
+      "max_caption_length": 2200,
+      "hashtags": ["#JulianDorey", "#Podcast", "#Clips", "#FYP", "#ForYou"]
+    },
+    "youtube": {
+      "handle": "Julian Dorey Clips",
+      "channel_id": "UCBI-XSaTS8OHvKElrz-5eUw",
+      "url": "https://www.youtube.com/channel/UCBI-XSaTS8OHvKElrz-5eUw",
+      "bio_link": "https://www.youtube.com/@JulianDorey/",
+      "post_type": "shorts",
+      "max_title_length": 100,
+      "default_tags": ["Julian Dorey", "Podcast", "Clips", "Shorts"]
+    }
+  },
+
+  "watermark": {
+    "file": "julian_dorey_watermark.png",
+    "scale": 0.25,
+    "opacity": 0.8,
+    "position": "bottom-center-below-subtitles",
+    "position_y_fraction": 0.88
+  },
+
+  "posting_schedule": {
+    "timezone": "America/Los_Angeles",
+    "times_utc": ["17:00", "21:00", "01:00"],
+    "note": "Adjust based on audience analytics. These map to 9am/1pm/5pm PT."
+  },
+
+  "rules": {
+    "min_episode": 343,
+    "require_watermark": true,
+    "no_reposting_others_clips": true,
+    "no_botting_engagement": true,
+    "no_making_julian_look_bad": true,
+    "must_edit_clips_yourself": true
+  }
+}
