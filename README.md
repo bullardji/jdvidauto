@@ -25,54 +25,43 @@ Discord clips ──> data/clips-input/ ──> Validate ──> Watermark ─�
 - **Python** — clip validation and watermark scripts
 - **Docker Compose** — runs everything
 
-## Quick Start
+## Quick Start (Local)
 
 ### 1. Prerequisites
 
-- Docker & Docker Compose v2+
-- A server with at least 2 GB RAM
+- **Python 3.10+**
+- **FFmpeg** (`brew install ffmpeg` on macOS, `sudo apt install ffmpeg` on Ubuntu)
 
-### 2. Setup
+### 2. One-command setup
 
 ```bash
-# Clone the repo
-git clone <this-repo> && cd <this-repo>
-
-# Create your environment file
-cp .env.example .env
-# Edit .env with your API keys and passwords
+bash setup.sh
 ```
 
-### 3. Download the Watermark
+This installs Python deps, downloads the watermark, creates data directories, and sets up your `.env` file.
 
-Download the watermark PNG from [Google Drive](https://drive.google.com/file/d/1TwHRHaww5vSOWIDVUoHJUsKcH9L1OUjQ/view?usp=sharing) and place it at:
+### 3. Process clips
 
+```bash
+# Single clip
+bash scripts/process_clip.sh data/clips-input/EP345_topic.mp4
+
+# All clips at once
+python3 scripts/batch_process.py data/clips-input/ data/clips-processed/
+
+# Generate captions for posting
+python3 scripts/generate_captions.py data/clips-processed/ --all
 ```
-config/watermark/julian_dorey_watermark.png
-```
 
-### 4. Start Services
+### Optional: n8n Automated Posting
+
+If you want fully automated scheduled posting (requires Docker):
 
 ```bash
 docker compose up -d
 ```
 
-This starts:
-- **n8n** on `http://localhost:5678` (web UI)
-- **PostgreSQL** (internal, port 5432)
-- **Redis** (internal, port 6379)
-- **clip-processor** (watches `data/clips-input/` for new videos)
-
-### 5. Import n8n Workflows
-
-1. Open n8n at `http://localhost:5678`
-2. Go to **Workflows** → **Import from File**
-3. Import each file from `n8n-workflows/`:
-   - `01-clip-ingestion.json` — polls for new clips, validates, applies watermark
-   - `02-multi-platform-post.json` — posts watermarked clips on schedule
-   - `03-content-calendar.json` — webhook API for scheduling specific clips
-4. Configure your API credentials in n8n's **Credentials** section
-5. Activate the workflows
+Then open `http://localhost:5678`, import the workflows from `n8n-workflows/`, and configure API credentials.
 
 ## Usage
 
@@ -187,16 +176,21 @@ All accounts must have Julian's main YouTube channel link in the bio.
 
 ```
 .
-├── docker-compose.yml          # All services
+├── setup.sh                    # One-command local setup
+├── requirements.txt            # Python dependencies
+├── docker-compose.yml          # n8n + Postgres + Redis (optional)
 ├── Dockerfile.processor        # FFmpeg + Python processor image
 ├── .env.example                # Environment template
 ├── config/
 │   ├── platforms.json          # Channel configs, rules, watermark specs
-│   └── watermark/              # Place watermark PNG here
+│   └── watermark/              # Watermark PNG (downloaded by setup.sh)
 ├── scripts/
 │   ├── apply_watermark.py      # FFmpeg watermark overlay
 │   ├── validate_clip.py        # Episode number + video validation
-│   ├── watch_and_process.py    # Auto-processing daemon
+│   ├── batch_process.py        # Process all clips in a directory
+│   ├── generate_captions.py    # Platform-specific captions & metadata
+│   ├── download_watermark.sh   # Download watermark from Google Drive
+│   ├── watch_and_process.py    # Auto-processing daemon (Docker)
 │   └── process_clip.sh         # Manual single-clip processing
 ├── n8n-workflows/
 │   ├── 01-clip-ingestion.json  # Clip validation + watermark workflow
