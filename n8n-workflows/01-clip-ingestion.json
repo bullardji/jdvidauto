@@ -1,0 +1,207 @@
+{
+  "name": "Julian Dorey - Clip Ingestion & Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "trigger-poll",
+      "name": "Poll Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "command": "ls -1 /data/clips-input/*.mp4 /data/clips-input/*.mov /data/clips-input/*.mkv 2>/dev/null || echo 'NO_FILES'"
+      },
+      "id": "list-new-clips",
+      "name": "List New Clips",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-files-exist",
+              "leftValue": "={{ $json.stdout }}",
+              "rightValue": "NO_FILES",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-has-files",
+      "name": "Has New Clips?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const stdout = $input.first().json.stdout;\nconst files = stdout.trim().split('\\n').filter(f => f.length > 0);\nreturn files.map(f => ({ json: { filepath: f, filename: f.split('/').pop() } }));"
+      },
+      "id": "split-files",
+      "name": "Split Into Individual Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "command": "=python3 /scripts/validate_clip.py --json \"{{ $json.filepath }}\""
+      },
+      "id": "validate-clip",
+      "name": "Validate Clip",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = JSON.parse($input.first().json.stdout);\nreturn [{ json: result }];"
+      },
+      "id": "parse-validation",
+      "name": "Parse Validation Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "is-valid-check",
+      "name": "Clip Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "command": "=python3 /scripts/apply_watermark.py \"{{ $json.file }}\" \"/data/clips-processed/$(basename \"{{ $json.file }}\" | sed 's/\\.[^.]*$//')_watermarked.mp4\" --watermark /data/watermark/julian_dorey_watermark.png --scale 0.25 --opacity 0.8"
+      },
+      "id": "apply-watermark",
+      "name": "Apply Watermark",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1780, 100]
+    },
+    {
+      "parameters": {
+        "command": "=mkdir -p /data/clips-input/_done && mv \"{{ $json.file }}\" /data/clips-input/_done/"
+      },
+      "id": "archive-original",
+      "name": "Archive Original",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [2000, 100]
+    },
+    {
+      "parameters": {
+        "command": "=mkdir -p /data/clips-input/_rejected && mv \"{{ $json.file }}\" /data/clips-input/_rejected/ && echo \"{{ $json.errors }}\" > \"/data/clips-input/_rejected/$(basename '{{ $json.file }}').reason.txt\""
+      },
+      "id": "reject-clip",
+      "name": "Reject Invalid Clip",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1780, 320]
+    },
+    {
+      "parameters": {},
+      "id": "no-files-noop",
+      "name": "No New Files",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 420]
+    }
+  ],
+  "connections": {
+    "Poll Every 5 Minutes": {
+      "main": [
+        [{ "node": "List New Clips", "type": "main", "index": 0 }]
+      ]
+    },
+    "List New Clips": {
+      "main": [
+        [{ "node": "Has New Clips?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Has New Clips?": {
+      "main": [
+        [{ "node": "Split Into Individual Files", "type": "main", "index": 0 }],
+        [{ "node": "No New Files", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Into Individual Files": {
+      "main": [
+        [{ "node": "Validate Clip", "type": "main", "index": 0 }]
+      ]
+    },
+    "Validate Clip": {
+      "main": [
+        [{ "node": "Parse Validation Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Validation Result": {
+      "main": [
+        [{ "node": "Clip Valid?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Clip Valid?": {
+      "main": [
+        [{ "node": "Apply Watermark", "type": "main", "index": 0 }],
+        [{ "node": "Reject Invalid Clip", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apply Watermark": {
+      "main": [
+        [{ "node": "Archive Original", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "julian-dorey" },
+    { "name": "clip-processing" }
+  ]
+}

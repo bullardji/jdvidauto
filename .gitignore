@@ -1,0 +1,51 @@
+# Environment
+.env
+
+# =============================================================================
+# Large media files — NEVER commit these (GitHub rejects files > 100 MB)
+# =============================================================================
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.wav
+*.flac
+*.zip
+*.tar.gz
+*.rar
+
+# Data directories (clips)
+data/clips-input/
+data/clips-processed/
+data/clips-posted/
+
+# Keep the directory structure
+!data/clips-input/.gitkeep
+!data/clips-processed/.gitkeep
+!data/clips-posted/.gitkeep
+
+# Docker volumes
+postgres_data/
+redis_data/
+n8n_data/
+
+# Watermark asset (downloaded via setup script)
+config/watermark/*.png
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+data/post_log.csv
+data/content_calendar.json
+
+# Notion export artifacts (large images/assets)
+*.pdf
